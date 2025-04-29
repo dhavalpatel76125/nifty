@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nifty Option Chain Viewer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Include DataTables CSS and JS (via CDN) -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-start p-8">
+
+  <h1 class="text-3xl font-bold mb-6 text-center">Nifty Option Chain (Live)</h1>
+
+  <div id="spot-price" class="text-lg font-semibold mb-4"></div>
+
+  <div class="w-full overflow-x-auto">
+    <table id="option-table" class="display min-w-full bg-white rounded-lg shadow-md">
+      <thead>
+        <tr class="bg-gray-200 text-gray-700 text-sm">
+          <th>Strike Price</th>
+          <th>Call Volume</th>
+          <th>Put Volume</th>
+          <th>Call Change OI</th>
+          <th>Put Change OI</th>
+        </tr>
+      </thead>
+      <tbody id="option-data" class="text-gray-600 text-sm"></tbody>
+    </table>
+  </div>
+
+  <div id="error" class="text-red-500 mt-4 hidden"></div>
+
+  <script>
+    async function fetchNiftyData() {
+      const url = '/api/nifty'; // hitting own backend proxy
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error('Failed to fetch data. Try again later.');
+        }
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error(error);
+        document.getElementById('error').innerText = error.message;
+        document.getElementById('error').classList.remove('hidden');
+        return null;
+      }
+    }
+
+    function fillTable(data) {
+      if (!data) return;
+
+      const spotPrice = data.records.underlyingValue;
+      const options = data.records.data;
+
+      document.getElementById('spot-price').innerText = `Nifty Spot Price: ${spotPrice}`;
+
+      const tbody = document.getElementById('option-data');
+      tbody.innerHTML = '';
+
+      options.forEach(item => {
+        const strikePrice = item.strikePrice;
+        const callVolume = item.CE ? item.CE.totalTradedVolume : 0;
+        const putVolume = item.PE ? item.PE.totalTradedVolume : 0;
+        const callChangeOI = item.CE ? item.CE.changeinOpenInterest : 0;
+        const putChangeOI = item.PE ? item.PE.changeinOpenInterest : 0;
+
+        const row = `
+          <tr>
+            <td>${strikePrice}</td>
+            <td>${callVolume}</td>
+            <td>${putVolume}</td>
+            <td>${callChangeOI}</td>
+            <td>${putChangeOI}</td>
+          </tr>
+        `;
+        tbody.insertAdjacentHTML('beforeend', row);
+      });
+
+      // Initialize or Reinitialize DataTable
+      if ($.fn.dataTable.isDataTable('#option-table')) {
+        $('#option-table').DataTable().destroy();
+      }
+
+      $('#option-table').DataTable({
+        pageLength: 10,
+        lengthMenu: [5, 10, 20, 50],
+        ordering: true,
+        searching: true
+      });
+    }
+
+    async function main() {
+      const data = await fetchNiftyData();
+      fillTable(data);
+
+      // Refresh data every 5 minutes
+      setInterval(async () => {
+        const updatedData = await fetchNiftyData();
+        fillTable(updatedData);
+      }, 300000);
+    }
+
+    main();
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "nifty_option_chain_webapp",
+  "version": "1.0.0",
+  "description": "## Description Streamlit-based web application that fetches Nifty Option Chain data every 5 minutes and shows: - Nearest 10 strike prices above and below Spot Price - Call/Put Volumes - Call/Put Change in Open Interest",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
+  }
+}
