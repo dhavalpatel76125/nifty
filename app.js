@@ -6,13 +6,12 @@ const path = require('path');
 const app = express();
 const PORT = 3000;
 
-// Allow CORS (optional if serving frontend from same server)
 app.use(cors());
 
-// Serve static files (your frontend) from 'public' folder
-app.use(express.static(path.join(__dirname)));
+// ✅ Serve root folder (where index.html is directly)
+app.use(express.static(__dirname));
 
-// Proxy route to fetch NSE data
+// ✅ API Proxy to bypass CORS
 app.get('/api/nifty', async (req, res) => {
     try {
         const response = await axios.get('https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY', {
@@ -28,7 +27,6 @@ app.get('/api/nifty', async (req, res) => {
     }
 });
 
-// Start server
 app.listen(PORT, () => {
     console.log(`✅ Server running at http://localhost:${PORT}`);
 });
