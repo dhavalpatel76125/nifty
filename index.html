@@ -5,41 +5,42 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Nifty Option Chain Viewer</title>
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen p-8">
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-start p-8">
 
-  <h1 class="text-3xl font-bold text-center mb-6">Nifty Option Chain (Live)</h1>
-  <div id="spot-price" class="text-lg font-semibold mb-4 text-center"></div>
+  <h1 class="text-3xl font-bold mb-6 text-center">Nifty Option Chain (Live)</h1>
 
-  <input type="text" id="search" placeholder="Search Strike Price..." class="mb-4 px-4 py-2 border rounded-md w-full max-w-lg mx-auto block" />
+  <div id="spot-price" class="text-lg font-semibold mb-4"></div>
 
-  <div class="overflow-x-auto max-w-6xl mx-auto">
-    <table class="min-w-full bg-white shadow rounded" id="option-table">
-      <thead class="bg-gray-200 text-gray-700 text-sm cursor-pointer">
-        <tr>
-          <th class="py-2 px-4" data-sort="strikePrice">Strike Price ⬍</th>
-          <th class="py-2 px-4" data-sort="callVolume">Call Volume ⬍</th>
-          <th class="py-2 px-4" data-sort="putVolume">Put Volume ⬍</th>
-          <th class="py-2 px-4" data-sort="callChangeOI">Call Change OI ⬍</th>
-          <th class="py-2 px-4" data-sort="putChangeOI">Put Change OI ⬍</th>
+  <div class="w-full overflow-x-auto">
+    <table id="option-table" class="display min-w-full bg-white rounded-lg shadow-md">
+      <thead>
+        <tr class="bg-gray-200 text-gray-700 text-sm">
+          <th>Strike Price</th>
+          <th>Call Volume</th>
+          <th>Put Volume</th>
+          <th>Call Change OI</th>
+          <th>Put Change OI</th>
         </tr>
       </thead>
-      <tbody id="option-data" class="text-sm text-gray-600"></tbody>
+      <tbody id="option-data" class="text-gray-600 text-sm"></tbody>
     </table>
-    <div id="pagination" class="flex justify-center mt-6 space-x-2"></div>
   </div>
 
-  <div id="error" class="text-red-500 mt-4 hidden text-center"></div>
+  <div id="error" class="text-red-500 mt-4 hidden"></div>
 
   <script>
-    let fullData = [], currentPage = 1, rowsPerPage = 10;
-    let currentSort = { field: 'strikePrice', direction: 'asc' };
-
     async function fetchNiftyData() {
+      const url = '/api/nifty';
       try {
-        const res = await fetch('/api/nifty');
-        if (!res.ok) throw new Error('Failed to fetch data.');
-        const data = await res.json();
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to fetch data.');
+        const data = await response.json();
         return data;
       } catch (err) {
         document.getElementById('error').textContent = err.message;
@@ -48,105 +49,53 @@
       }
     }
 
-    function renderTable(data) {
-      const tbody = document.getElementById('option-data');
-      tbody.innerHTML = '';
-      const start = (currentPage - 1) * rowsPerPage;
-      const paginated = data.slice(start, start + rowsPerPage);
+    function populateTable(data) {
+      const spotPrice = data.records.underlyingValue;
+      document.getElementById('spot-price').innerText = `Nifty Spot Price: ${spotPrice}`;
 
-      paginated.forEach(item => {
-        const row = `
-          <tr class="border-b hover:bg-gray-100">
-            <td class="py-2 px-4">${item.strikePrice}</td>
-            <td class="py-2 px-4">${item.callVolume}</td>
-            <td class="py-2 px-4">${item.putVolume}</td>
-            <td class="py-2 px-4">${item.callChangeOI}</td>
-            <td class="py-2 px-4">${item.putChangeOI}</td>
-          </tr>`;
-        tbody.insertAdjacentHTML('beforeend', row);
-      });
+      const options = data.records.data;
+      const rows = options.map(item => {
+        const strikePrice = item.strikePrice;
+        const callVolume = item.CE?.totalTradedVolume || 0;
+        const putVolume = item.PE?.totalTradedVolume || 0;
+        const callChangeOI = item.CE?.changeinOpenInterest || 0;
+        const putChangeOI = item.PE?.changeinOpenInterest || 0;
+        return `
+          <tr>
+            <td>${strikePrice}</td>
+            <td>${callVolume}</td>
+            <td>${putVolume}</td>
+            <td>${callChangeOI}</td>
+            <td>${putChangeOI}</td>
+          </tr>
+        `;
+      }).join('');
 
-      renderPagination(data.length);
-    }
+      document.getElementById('option-data').innerHTML = rows;
 
-    function renderPagination(totalItems) {
-      const container = document.getElementById('pagination');
-      container.innerHTML = '';
-      const totalPages = Math.ceil(totalItems / rowsPerPage);
-
-      for (let i = 1; i <= totalPages; i++) {
-        const btn = document.createElement('button');
-        btn.textContent = i;
-        btn.className = `px-3 py-1 rounded ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-white border'}`;
-        btn.onclick = () => {
-          currentPage = i;
-          renderTable(filterAndSortData());
-        };
-        container.appendChild(btn);
+      // Reinitialize DataTable
+      if ($.fn.dataTable.isDataTable('#option-table')) {
+        $('#option-table').DataTable().destroy();
       }
-    }
 
-    function filterAndSortData() {
-      const search = document.getElementById('search').value.toLowerCase();
-      let filtered = fullData.filter(d => d.strikePrice.toString().includes(search));
-      filtered.sort((a, b) => {
-        const valA = a[currentSort.field];
-        const valB = b[currentSort.field];
-        return currentSort.direction === 'asc' ? valA - valB : valB - valA;
-      });
-      return filtered;
-    }
-
-    function setupSorting() {
-      document.querySelectorAll('th[data-sort]').forEach(th => {
-        th.onclick = () => {
-          const field = th.dataset.sort;
-          if (currentSort.field === field) {
-            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-          } else {
-            currentSort = { field, direction: 'asc' };
-          }
-          renderTable(filterAndSortData());
-        };
+      $('#option-table').DataTable({
+        pageLength: 10,
+        lengthMenu: [5, 10, 20, 50],
+        ordering: true,
+        searching: true
       });
     }
 
     async function init() {
       const data = await fetchNiftyData();
-      if (!data) return;
+      if (data) populateTable(data);
 
-      document.getElementById('spot-price').textContent = `Nifty Spot Price: ${data.records.underlyingValue}`;
-      fullData = data.records.data.map(item => ({
-        strikePrice: item.strikePrice,
-        callVolume: item.CE?.totalTradedVolume || 0,
-        putVolume: item.PE?.totalTradedVolume || 0,
-        callChangeOI: item.CE?.changeinOpenInterest || 0,
-        putChangeOI: item.PE?.changeinOpenInterest || 0
-      }));
-
-      setupSorting();
-
-      renderTable(filterAndSortData());
-
-      // Refresh every 5 minutes
+      // Optional auto-refresh every 5 mins
       setInterval(async () => {
-        const updated = await fetchNiftyData();
-        if (!updated) return;
-        fullData = updated.records.data.map(item => ({
-          strikePrice: item.strikePrice,
-          callVolume: item.CE?.totalTradedVolume || 0,
-          putVolume: item.PE?.totalTradedVolume || 0,
-          callChangeOI: item.CE?.changeinOpenInterest || 0,
-          putChangeOI: item.PE?.changeinOpenInterest || 0
-        }));
-        renderTable(filterAndSortData());
+        const newData = await fetchNiftyData();
+        if (newData) populateTable(newData);
       }, 300000);
     }
-
-    document.getElementById('search').addEventListener('input', () => {
-      currentPage = 1;
-      renderTable(filterAndSortData());
-    });
 
     init();
   </script>
