@@ -36,20 +36,13 @@
 
   <script>
     async function fetchNiftyData() {
-      const url = 'https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY';
+      const url = '/api/nifty';
       try {
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0',
-            'Accept': 'application/json'
-          }
-        });
+        const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to fetch data.');
         const data = await response.json();
         return data;
       } catch (err) {
-        console.error(err);
         document.getElementById('error').textContent = err.message;
         document.getElementById('error').classList.remove('hidden');
         return null;
@@ -97,7 +90,7 @@
       const data = await fetchNiftyData();
       if (data) populateTable(data);
 
-      // Auto-refresh every 5 mins
+      // Optional auto-refresh every 5 mins
       setInterval(async () => {
         const newData = await fetchNiftyData();
         if (newData) populateTable(newData);
