@@ -10,7 +10,7 @@ const PORT = 3000;
 app.use(cors());
 
 // Serve static files (your frontend) from 'public' folder
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, '/')));
 
 // Proxy route to fetch NSE data
 app.get('/api/nifty', async (req, res) => {
