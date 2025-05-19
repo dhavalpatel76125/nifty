@@ -22,10 +22,10 @@
       <thead>
         <tr class="bg-gray-200 text-gray-700 text-sm">
           <th>Strike Price</th>
-          <th>Call Volume</th>
-          <th>Put Volume</th>
-          <th>Call Change OI</th>
-          <th>Put Change OI</th>
+          <th>Call OI</th>
+          <th>Call Change in OI</th>
+          <th>Put OI</th>
+          <th>Put Change in OI</th>
         </tr>
       </thead>
       <tbody id="option-data" class="text-gray-600 text-sm"></tbody>
@@ -61,18 +61,27 @@
       document.getElementById('spot-price').innerText = `Nifty Spot Price: ${spotPrice}`;
 
       const options = data.records.data;
-      const rows = options.map(item => {
+      const interval = 50;
+      const base = Math.round(spotPrice / interval) * interval;
+      const targetStrikes = [];
+      for (let i = 5; i > 0; i--) targetStrikes.push(base - i * interval);
+      targetStrikes.push(base);
+      for (let i = 1; i <= 5; i++) targetStrikes.push(base + i * interval);
+
+      const filtered = options.filter(item => targetStrikes.includes(item.strikePrice));
+
+      const rows = filtered.map(item => {
         const strikePrice = item.strikePrice;
-        const callVolume = item.CE?.totalTradedVolume || 0;
-        const putVolume = item.PE?.totalTradedVolume || 0;
+        const callOI = item.CE?.openInterest || 0;
         const callChangeOI = item.CE?.changeinOpenInterest || 0;
+        const putOI = item.PE?.openInterest || 0;
         const putChangeOI = item.PE?.changeinOpenInterest || 0;
         return `
           <tr>
             <td>${strikePrice}</td>
-            <td>${callVolume}</td>
-            <td>${putVolume}</td>
+            <td>${callOI}</td>
             <td>${callChangeOI}</td>
+            <td>${putOI}</td>
             <td>${putChangeOI}</td>
           </tr>
         `;
