@@ -2,10 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nifty Option Chain Viewer</title>
   <script src="https://cdn.tailwindcss.com"></script>
-
   <!-- DataTables -->
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -21,11 +20,16 @@
     <table id="option-table" class="display min-w-full bg-white rounded-lg shadow-md">
       <thead>
         <tr class="bg-gray-200 text-gray-700 text-sm">
-          <th>Strike Price</th>
-          <th>Call Volume</th>
-          <th>Put Volume</th>
-          <th>Call Change OI</th>
-          <th>Put Change OI</th>
+          <th>Strike</th>
+          <th>Type</th>
+          <th>LTP</th>
+          <th>Prev LTP</th>
+          <th>% Change</th>
+          <th>OI</th>
+          <th>Volume</th>
+          <th>3% Move</th>
+          <th>Spot</th>
+          <th>Time</th>
         </tr>
       </thead>
       <tbody id="option-data" class="text-gray-600 text-sm"></tbody>
@@ -36,51 +40,81 @@
 
   <script>
     async function fetchNiftyData() {
-      const url = 'https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY';
       try {
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0',
-            'Accept': 'application/json'
-          }
-        });
-        if (!response.ok) throw new Error('Failed to fetch data.');
+        const response = await fetch("https://your-proxy-url.com/api/nifty"); // Use proxy server
+        if (!response.ok) throw new Error("Failed to fetch data.");
         const data = await response.json();
         return data;
       } catch (err) {
         console.error(err);
-        document.getElementById('error').textContent = err.message;
-        document.getElementById('error').classList.remove('hidden');
+        document.getElementById("error").textContent = err.message;
+        document.getElementById("error").classList.remove("hidden");
         return null;
       }
     }
 
+    function calculateChange(lastPrice, prevClose) {
+      if (!prevClose || prevClose === 0) return 0;
+      return ((lastPrice - prevClose) / prevClose) * 100;
+    }
+
     function populateTable(data) {
       const spotPrice = data.records.underlyingValue;
-      document.getElementById('spot-price').innerText = `Nifty Spot Price: ${spotPrice}`;
+      document.getElementById("spot-price").innerText = `Nifty Spot Price: ${spotPrice}`;
 
-      const options = data.records.data;
-      const rows = options.map(item => {
-        const strikePrice = item.strikePrice;
-        const callVolume = item.CE?.totalTradedVolume || 0;
-        const putVolume = item.PE?.totalTradedVolume || 0;
-        const callChangeOI = item.CE?.changeinOpenInterest || 0;
-        const putChangeOI = item.PE?.changeinOpenInterest || 0;
-        return `
-          <tr>
-            <td>${strikePrice}</td>
-            <td>${callVolume}</td>
-            <td>${putVolume}</td>
-            <td>${callChangeOI}</td>
-            <td>${putChangeOI}</td>
-          </tr>
-        `;
-      }).join('');
+      const interval = 50;
+      const base = Math.round(spotPrice / interval) * interval;
+      const targetStrikes = [];
+      for (let i = 5; i > 0; i--) targetStrikes.push(base - i * interval);
+      targetStrikes.push(base);
+      for (let i = 1; i <= 5; i++) targetStrikes.push(base + i * interval);
 
-      document.getElementById('option-data').innerHTML = rows;
+      const rows = data.records.data
+        .filter(item => targetStrikes.includes(item.strikePrice))
+        .flatMap(item => {
+          const strike = item.strikePrice;
+          const time = new Date().toLocaleTimeString();
+          const commonData = { strike, spot: spotPrice, time };
 
-      // Reinitialize DataTable
+          const ce = item.CE ? {
+            type: "CALL",
+            ltp: item.CE.lastPrice,
+            prevLtp: item.CE.prevClose,
+            change: calculateChange(item.CE.lastPrice, item.CE.prevClose).toFixed(2),
+            oi: item.CE.openInterest,
+            vol: item.CE.totalTradedVolume,
+            move: Math.abs(calculateChange(item.CE.lastPrice, item.CE.prevClose)) >= 3 ? "YES" : ""
+          } : null;
+
+          const pe = item.PE ? {
+            type: "PUT",
+            ltp: item.PE.lastPrice,
+            prevLtp: item.PE.prevClose,
+            change: calculateChange(item.PE.lastPrice, item.PE.prevClose).toFixed(2),
+            oi: item.PE.openInterest,
+            vol: item.PE.totalTradedVolume,
+            move: Math.abs(calculateChange(item.PE.lastPrice, item.PE.prevClose)) >= 3 ? "YES" : ""
+          } : null;
+
+          return [ce, pe].filter(Boolean).map(opt => `
+            <tr>
+              <td>${commonData.strike}</td>
+              <td>${opt.type}</td>
+              <td>${opt.ltp}</td>
+              <td>${opt.prevLtp}</td>
+              <td>${opt.change}%</td>
+              <td>${opt.oi}</td>
+              <td>${opt.vol}</td>
+              <td class="${opt.move ? 'text-red-600 font-bold' : ''}">${opt.move}</td>
+              <td>${commonData.spot}</td>
+              <td>${commonData.time}</td>
+            </tr>
+          `);
+        }).join('');
+
+      const tableBody = document.getElementById("option-data");
+      tableBody.innerHTML = rows;
+
       if ($.fn.dataTable.isDataTable('#option-table')) {
         $('#option-table').DataTable().destroy();
       }
@@ -96,8 +130,6 @@
     async function init() {
       const data = await fetchNiftyData();
       if (data) populateTable(data);
-
-      // Auto-refresh every 5 mins
       setInterval(async () => {
         const newData = await fetchNiftyData();
         if (newData) populateTable(newData);
